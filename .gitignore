@@ -1,0 +1,8 @@
+/back_up
+/checkpoints*
+/dataset
+/mypaint/libmypaint
+/mypaint/mypaint
+/mypaint/mypaint-brushes
+/val_out*
+__pycache__/
