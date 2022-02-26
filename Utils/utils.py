@@ -66,8 +66,8 @@ def get_neural_render(stroke_type, net_R):
 	return define_R(rddim=ACTION_SIZE[stroke_type],\
 		 shape_dim=ACTION_SHAPESIZE[stroke_type], netR=net_R)
 
-def get_discriminator():
-	return define_D()
+def get_discriminator(stroke_type):
+	return define_D(ACTION_SIZE[stroke_type])
 
 def get_translator(args):
 	return define_T(ACTION_SIZE[args.StrokeType], ACTION_SIZE[args.TargetStroke], "FCN4L")

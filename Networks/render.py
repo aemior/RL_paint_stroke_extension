@@ -94,6 +94,8 @@ def define_R(rddim, shape_dim, netR, init_type='normal', init_gain=0.02, gpu_ids
     net = None
     if netR == 'dual-render':
         net = DualRender(rddim, shape_dim)
+    elif netR == 'dual-render-noise':
+        net = DualRender_noise(rddim, shape_dim)
     else:
         raise NotImplementedError('Generator model name [%s] is not recognized' % netR)
     return init_net(net, init_type, init_gain, gpu_ids)
@@ -185,4 +187,20 @@ class DualRender(nn.Module):
     def forward(self, a):
         foreground = self.shading_path(a.view(a.shape+(1,1)))
         alpha = self.raster_path(a[:,:self.shape_dim])
+        return foreground, alpha
+
+class DualRender_noise(nn.Module):
+    def __init__(self, rddim, shape_dim):
+        super(DualRender_noise, self).__init__()
+        self.rddim = rddim+1
+        self.shape_dim = shape_dim+1
+        self.shading_path = DCGAN_3C(self.rddim)
+        self.raster_path = PixelShuffleNet(self.shape_dim)
+    
+    def forward(self, a):
+        noise = torch.rand((a.shape[0],1)).to(a.device)
+        s_p = torch.cat((a.view(a.shape+(1,1)), noise.view(a.shape[0],1,1,1)), dim=1)
+        r_p = torch.cat((a[:,:self.shape_dim-1], noise), dim=1)
+        foreground = self.shading_path(s_p)
+        alpha = self.raster_path(r_p)
         return foreground, alpha

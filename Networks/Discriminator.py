@@ -1,57 +1,40 @@
-import imp
-from turtle import forward
-from torch.nn import init
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
 from Networks.translator import init_net
 
-def define_D():
-	net = BinDescriminator()
+def define_D(cond_dim):
+	#net = torch.nn.utils.spectral_norm(CondDescriminator(cond_dim))
+	net = CondDescriminator(cond_dim)
 	return init_net(net, init_type='normal', init_gain=0.02, gpu_ids=[])
 
-class TReLU(nn.Module):
-    def __init__(self):
-            super(TReLU, self).__init__()
-            self.alpha = nn.Parameter(torch.FloatTensor(1), requires_grad=True)
-            self.alpha.data.fill_(0)
-
-    def forward(self, x):
-        x = F.relu(x - self.alpha) + self.alpha
-        return x
-
-class BinDescriminator(nn.Module):
-	def __init__(self):
-		super(BinDescriminator, self).__init__()
+class CondDescriminator(nn.Module):
+	def __init__(self, cond_dim):
+		super(CondDescriminator, self).__init__()
+		self.in_conv = nn.utils.spectral_norm(nn.Conv2d(3, 64, 3, 1, 1))
+		self.in_fc = nn.utils.spectral_norm(nn.Linear(cond_dim, 64)) 
 		self.conv = nn.Sequential(
-			nn.Conv2d(3, 16, 3, 1, 1),
-			TReLU(),
-			nn.Conv2d(16, 32, 5, 2, 2),
-			nn.BatchNorm2d(32),
-			TReLU(),
-			nn.Conv2d(32, 64, 5, 2, 2),
-			nn.BatchNorm2d(64),
-			TReLU(),
-			nn.Conv2d(64, 128, 5, 2, 2),
-			nn.BatchNorm2d(128),
-			TReLU(),
-			nn.Conv2d(128, 256, 5, 2, 2),
-			nn.BatchNorm2d(256),
-			TReLU(),
-			nn.Conv2d(256, 512, 5, 2, 2),
-			nn.BatchNorm2d(512),
-			TReLU()
+			nn.utils.spectral_norm(nn.Conv2d(64, 128, 5, 2, 2)),
+			#nn.BatchNorm2d(128),
+			nn.ReLU(),
+			nn.utils.spectral_norm(nn.Conv2d(128, 256, 5, 2, 2)),
+			nn.ReLU(),
+			nn.utils.spectral_norm(nn.Conv2d(256, 512, 5, 2, 2)),
+			nn.ReLU(),
 		)
 		self.fc = nn.Sequential(
-			nn.Linear(512, 1),
-			#nn.Softmax(dim=1)
-			nn.Sigmoid()
+			nn.utils.spectral_norm(nn.Linear(512, 1)),
+			nn.LeakyReLU(),
 		)
-	
+
+	def set_cond(self, cond):
+		self.cond = self.in_fc(cond)
+
 	def forward(self, x):
-		x = self.conv(x)
-		x = F.avg_pool2d(x, 4)
+		x = F.relu(self.in_conv(x))
+		x = self.conv(x+self.cond.view(self.cond.shape+(1,1)))
+		x = F.avg_pool2d(x, 16)
 		x = self.fc(x.view(-1,512))
 		return x
 
