@@ -201,6 +201,8 @@ class DualRender_noise(nn.Module):
         noise = torch.rand((a.shape[0],1)).to(a.device)
         s_p = torch.cat((a.view(a.shape+(1,1)), noise.view(a.shape[0],1,1,1)), dim=1)
         r_p = torch.cat((a[:,:self.shape_dim-1], noise), dim=1)
+        #foreground = F.sigmoid(self.shading_path(s_p))
+        #alpha = F.sigmoid(self.raster_path(r_p))
         foreground = self.shading_path(s_p)
         alpha = self.raster_path(r_p)
         return foreground, alpha

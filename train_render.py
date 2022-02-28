@@ -12,11 +12,13 @@ parser.add_argument('--net_R', type=str, default='dual-render', metavar='str',
                          'zou-fusion-net, or zou-fusion-net-light')
 parser.add_argument('--checkpoint_dir', type=str, default=r'./checkpoints_R', metavar='str',
                     help='dir to save checkpoints (default: ...)')
-parser.add_argument('--render_ckpt', type=str, default=r'./checkpoints_R', metavar='str',
+parser.add_argument('--render_ckpt', type=str, default=r'./checkpoints_RD/50_epoch_bakup', metavar='str',
                     help='dir to save checkpoints (default: ...)')
 parser.add_argument('--vis_dir', type=str, default=r'./val_out_R', metavar='str',
                     help='dir to save results during training (default: ./val_out_R)')
 parser.add_argument('--lr', type=float, default=2e-5,
+                    help='learning rate (default: 0.0002)')
+parser.add_argument('--lr_gan', type=float, default=2e-5,
                     help='learning rate (default: 0.0002)')
 parser.add_argument('--max_num_epochs', type=int, default=1000, metavar='N',
                     help='max number of training epochs (default 400)')

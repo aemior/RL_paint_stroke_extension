@@ -104,6 +104,8 @@ class Train(object):
         self.PD_C_B = pred_alpha * pred_foreground
         self.PD_C_W = (1-pred_alpha) + pred_alpha * pred_foreground
         gt_foreground, gt_alpha = self.batch['B'].to(device),self.batch['ALPHA'].to(device)
+        self.old_GT_C_B = self.GT_C_B
+        self.old_GT_C_W = self.GT_C_W
         self.GT_C_B = gt_alpha * gt_foreground
         self.GT_C_W = (1-gt_alpha) + gt_alpha * gt_foreground 
 
@@ -124,6 +126,12 @@ class Train(object):
 
         m = len(self.dataloader)
         
+        if np.mod(self.batch_id, 10) == 1 and self.is_VIS:
+            for loss_name in self.LOSS.keys():
+                self.vis.line(Y=[self.LOSS[loss_name].item()],
+                X=[m*self.epoch_id+self.batch_id], update='append',
+                win=loss_name, name=loss_name)
+
         if np.mod(self.batch_id, 100) == 1:
             mem_usage = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
             # print("MEM USAGE:", mem_usage/(1024*1024))
@@ -213,12 +221,14 @@ class DisTrain(Train):
         super().__init__(args)
         self.D = get_discriminator(args.StrokeType).to(device)
 
-        self.optimizer_D = optim.Adam(self.D.parameters(), lr=2e-5, betas=(0.9,0.999))
+        self.optimizer_D = optim.Adam(self.D.parameters(), lr=args.lr_gan, betas=(0.9,0.999))
         self.exp_lr_scheduler_D = lr_scheduler.StepLR(
             self.optimizer_D, step_size=100, gamma=0.1
         )
 
         self.render_ckpt = args.render_ckpt
+        self.DLOSS = {}
+        self.dataloader_2 = get_stroke_dataset(args) 
 
     def load_D_checkpoint(self):
         if os.path.exists(os.path.join(self.checkpoint_dir, 'last_D_ckpt.pt')):
@@ -234,6 +244,11 @@ class DisTrain(Train):
             self.D.to(device)
 
         else:
+            if os.path.exists(os.path.join(self.render_ckpt, 'last_ckpt.pt')):
+                print("# load pretrain  render checkpoint..")
+                checkpoint = torch.load(os.path.join(self.render_ckpt, 'last_ckpt.pt'))
+                self.render.load_state_dict(checkpoint['model_R_state_dict'])
+                self.render.to(device)
             print('# training D from scratch...')
 
     def _save_D_checkpoint(self, ckpt_name):
@@ -250,12 +265,28 @@ class DisTrain(Train):
         #self.D_pd_fake_W = self.D(self.PD_C_W)
         self.D_pd_real_B = self.D(self.GT_C_B)
         self.D_pd_fake_B = self.D(self.PD_C_B)
+        if self.old_GT_C_B.shape[0] != self.GT_C_B.shape[0]:
+            other_C_B = self.old_GT_C_B[:self.GT_C_B.shape[0]]
+        else:
+            other_C_B = self.old_GT_C_B
+        #other_C_W = (1-other_alpha) + other_alpha * other_foreground 
+        self.D_pd_cond_B = self.D(other_C_B)
 
     def _backward_D(self):
         loss_real = self.D_pd_real_B.mean()# + self.D_pd_real_W.mean()
         loss_fake = self.D_pd_fake_B.mean()# + self.D_pd_fake_W.mean()
-        self.LOSS['D_loss'] = loss_real - loss_fake
+        loss_bc = self.D_pd_cond_B.mean()
+        #loss_real = torch.log(self.D_pd_real_B).mean()# + self.D_pd_real_W.mean()
+        #loss_fake = torch.log(1-self.D_pd_fake_B).mean()# + self.D_pd_fake_W.mean()
+        #loss_bc = torch.log(1-self.D_pd_cond_B).mean()
+        self.LOSS['D_loss'] = loss_real - 0.5 * (loss_fake + loss_bc)
+        #self.LOSS['D_loss'] = loss_real - loss_fake
+        #self.LOSS['D_loss'] = loss_real + loss_fake + loss_bc
         self.LOSS['D_loss'].backward()
+        #self.DLOSS['D_loss'] = self.LOSS['D_loss'] 
+        self.DLOSS['D_fake'] = loss_fake
+        self.DLOSS['D_real'] = loss_real
+        self.DLOSS['D_mismatch'] = loss_bc
 
     def _backward_R(self):
 
@@ -266,15 +297,44 @@ class DisTrain(Train):
         self.LOSS['R_loss'].backward()
     
     def _update_lr_sechedulers(self):
-        super()._update_lr_sechedulers()
+        if self.epoch_id > 20:
+            super()._update_lr_sechedulers()
         self.exp_lr_scheduler_D.step()
 
-    def upd(self, ckpt_name):
-        super()._save_checkpoint(ckpt_name)
-    
+    def _collect_running_batch_states(self):
+        super()._collect_running_batch_states()
+        m = len(self.dataloader)
+        if np.mod(self.batch_id, 10) == 1 and self.is_VIS:
+            for loss_name in self.DLOSS.keys():
+                self.vis.line(Y=[self.DLOSS[loss_name].item()],
+                X=[m*self.epoch_id+self.batch_id], update='append',
+                win='D LOSS', name=loss_name)
+
+
     def _update_checkpoints(self):
         super()._update_checkpoints()
         self._save_D_checkpoint('last_D_ckpt.pt')
+
+    def update_D(self, batch):
+        self.D.train()
+        self.render.eval()
+        with torch.no_grad():
+            self._forward_pass(batch)
+        self.forward_pass_D()
+        self.optimizer_D.zero_grad()
+        self._backward_D()
+        self.optimizer_D.step()
+
+    def update_R(self, batch, recon=False):
+        self.D.eval()
+        self.render.train()
+        self._forward_pass(batch)
+        self.optimizer_R.zero_grad()
+        if recon:
+            super()._backward_R()
+        else:
+            self._backward_R()
+        self.optimizer_R.step()
 
     def train(self):
         print("Traning Render. Device:", device)
@@ -288,18 +348,18 @@ class DisTrain(Train):
             self.is_training = True
             self.render.train()
             self.D.train()
+            w_batch = next(iter(self.dataloader_2))
+            self._forward_pass(w_batch)
             for self.batch_id, batch in enumerate(self.dataloader, 0):
-                self._forward_pass(batch)
+                #self._forward_pass(batch)
                 #if (self.batch_id+1) % 10 == 0:
-                if (self.batch_id+1) % 2 == 0:
-                    self.optimizer_R.zero_grad()
-                    self._backward_R()
-                    self.optimizer_R.step()
+                if self.epoch_id < 25:
+                    self.update_D(batch)
                 else:
-                    self.forward_pass_D()
-                    self.optimizer_D.zero_grad()
-                    self._backward_D()
-                    self.optimizer_D.step()
+                    if (self.batch_id) % 5 == 0:
+                        self.update_D(batch)
+                    else:
+                        self.update_R(batch)
                 self._collect_running_batch_states()
             self._collect_epoch_states()
             self._update_lr_sechedulers()
