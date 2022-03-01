@@ -7,8 +7,8 @@ from Networks.translator import init_net
 def define_D(cond_dim):
 	#net = torch.nn.utils.spectral_norm(CondDescriminator(cond_dim))
 	#net = CondDescriminator(cond_dim)
-	net = CondDescriminatorV5(cond_dim)
-	#net = Descriminator(cond_dim)
+	#net = CondDescriminatorV5(cond_dim)
+	net = Descriminator(cond_dim)
 	#return net
 	return init_net(net, init_type='normal', init_gain=0.02, gpu_ids=[])
 
@@ -164,6 +164,9 @@ class CondDescriminatorV4(nn.Module):
 		return x.view(-1,1)
 
 class CondDescriminatorV5(nn.Module):
+	"""
+	这个鉴别器可以收敛，学习率2e-4， real-0.5*(fake+mis)
+	"""
 	def __init__(self, cond_dim):
 		super(CondDescriminatorV5, self).__init__()
 		self.in_fc = nn.Sequential(
@@ -228,6 +231,8 @@ class Descriminator(nn.Module):
 			nn.Conv2d(128, 1, 5, 2, 2),
 			nn.LeakyReLU(),
 		)
+	def set_cond(self, cond):
+		pass
 	def forward(self, x):
 		x = self.in_conv(x)
 		x = self.conv(x)

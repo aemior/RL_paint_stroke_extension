@@ -228,6 +228,7 @@ class DisTrain(Train):
 
         self.render_ckpt = args.render_ckpt
         self.DLOSS = {}
+        self.RLOSS = {}
         self.dataloader_2 = get_stroke_dataset(args) 
 
     def load_D_checkpoint(self):
@@ -261,8 +262,8 @@ class DisTrain(Train):
     def forward_pass_D(self):
 
         self.D.set_cond(self.z_in)
-        #self.D_pd_real_W = self.D(self.GT_C_W)
-        #self.D_pd_fake_W = self.D(self.PD_C_W)
+        self.D_pd_real_W = self.D(self.GT_C_W)
+        self.D_pd_fake_W = self.D(self.PD_C_W)
         self.D_pd_real_B = self.D(self.GT_C_B)
         self.D_pd_fake_B = self.D(self.PD_C_B)
         if self.old_GT_C_B.shape[0] != self.GT_C_B.shape[0]:
@@ -270,34 +271,40 @@ class DisTrain(Train):
         else:
             other_C_B = self.old_GT_C_B
         #other_C_W = (1-other_alpha) + other_alpha * other_foreground 
-        self.D_pd_cond_B = self.D(other_C_B)
+        #self.D_pd_cond_B = self.D(other_C_B)
 
     def _backward_D(self):
-        loss_real = self.D_pd_real_B.mean()# + self.D_pd_real_W.mean()
-        loss_fake = self.D_pd_fake_B.mean()# + self.D_pd_fake_W.mean()
-        loss_bc = self.D_pd_cond_B.mean()
+        loss_real = self.D_pd_real_B.mean() + self.D_pd_real_W.mean()
+        loss_fake = self.D_pd_fake_B.mean() + self.D_pd_fake_W.mean()
+        #loss_bc = self.D_pd_cond_B.mean()
         #loss_real = torch.log(self.D_pd_real_B).mean()# + self.D_pd_real_W.mean()
         #loss_fake = torch.log(1-self.D_pd_fake_B).mean()# + self.D_pd_fake_W.mean()
         #loss_bc = torch.log(1-self.D_pd_cond_B).mean()
-        self.LOSS['D_loss'] = loss_real - 0.5 * (loss_fake + loss_bc)
-        #self.LOSS['D_loss'] = loss_real - loss_fake
+        #self.LOSS['D_loss'] = loss_real - 0.5 * (loss_fake + loss_bc)
+        self.LOSS['D_loss'] = loss_real - loss_fake
         #self.LOSS['D_loss'] = loss_real + loss_fake + loss_bc
         self.LOSS['D_loss'].backward()
         #self.DLOSS['D_loss'] = self.LOSS['D_loss'] 
         self.DLOSS['D_fake'] = loss_fake
         self.DLOSS['D_real'] = loss_real
-        self.DLOSS['D_mismatch'] = loss_bc
+        #self.DLOSS['D_mismatch'] = loss_bc
 
     def _backward_R(self):
 
-        self.D.set_cond(self.z_in)
         #dloss_w = self.D(self.PD_C_W)
+        pixel_loss1 = self._pxl_loss(self.PD_C_B, self.GT_C_B)
+        pixel_loss2 = self._pxl_loss(self.PD_C_W, self.GT_C_W)
+        self.D.set_cond(self.z_in)
         dloss_b = self.D(self.PD_C_B)
-        self.LOSS['R_loss'] = dloss_b.mean()# + dloss_w.mean()
+        dloss_w = self.D(self.PD_C_W)
+        self.RLOSS['d_loss'] = 25e-5 * (dloss_b.mean() + dloss_w.mean())
+        self.RLOSS['pixel_loss_W'] = pixel_loss2
+        self.RLOSS['pixel_loss_B'] = pixel_loss1
+        self.LOSS['R_loss'] = pixel_loss1 + pixel_loss2 + self.RLOSS['d_loss']
         self.LOSS['R_loss'].backward()
     
     def _update_lr_sechedulers(self):
-        if self.epoch_id > 20:
+        if self.epoch_id > 2:
             super()._update_lr_sechedulers()
         self.exp_lr_scheduler_D.step()
 
@@ -309,6 +316,10 @@ class DisTrain(Train):
                 self.vis.line(Y=[self.DLOSS[loss_name].item()],
                 X=[m*self.epoch_id+self.batch_id], update='append',
                 win='D LOSS', name=loss_name)
+            for loss_name in self.RLOSS.keys():
+                self.vis.line(Y=[self.RLOSS[loss_name].item()],
+                X=[m*self.epoch_id+self.batch_id], update='append',
+                win='R LOSS', name=loss_name)
 
 
     def _update_checkpoints(self):
@@ -353,13 +364,13 @@ class DisTrain(Train):
             for self.batch_id, batch in enumerate(self.dataloader, 0):
                 #self._forward_pass(batch)
                 #if (self.batch_id+1) % 10 == 0:
-                if self.epoch_id < 25:
+                if self.epoch_id < 3:
                     self.update_D(batch)
                 else:
                     if (self.batch_id) % 5 == 0:
-                        self.update_D(batch)
-                    else:
                         self.update_R(batch)
+                    else:
+                        self.update_D(batch)
                 self._collect_running_batch_states()
             self._collect_epoch_states()
             self._update_lr_sechedulers()
