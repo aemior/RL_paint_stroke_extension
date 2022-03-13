@@ -48,6 +48,7 @@ class Train(object):
         )
         self._pxl_loss = torch.nn.MSELoss()
         self.only_black = args.only_black
+        self.only_white = args.only_white
 
         self.VAL_ACC = np.array([], np.float32)
         if os.path.exists(os.path.join(self.checkpoint_dir, 'val_acc.npy')):
@@ -113,8 +114,10 @@ class Train(object):
 
         pixel_loss1 = self._pxl_loss(self.PD_C_B, self.GT_C_B)
         pixel_loss2 = self._pxl_loss(self.PD_C_W, self.GT_C_W)
-        if self.only_black:
+        if self.only_black and not self.only_white:
             self.LOSS['R_loss'] = pixel_loss1
+        elif self.only_white and not self.only_black:
+            self.LOSS['R_loss'] = pixel_loss2
         else:
             self.LOSS['R_loss'] = pixel_loss1 + pixel_loss2
         self.LOSS['RCW_loss'] = pixel_loss2

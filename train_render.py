@@ -16,7 +16,7 @@ parser.add_argument('--render_ckpt', type=str, default=r'./checkpoints_RD/50_epo
                     help='dir to save checkpoints (default: ...)')
 parser.add_argument('--vis_dir', type=str, default=r'./val_out_R', metavar='str',
                     help='dir to save results during training (default: ./val_out_R)')
-parser.add_argument('--lr', type=float, default=2e-5,
+parser.add_argument('--lr', type=float, default=2e-4,
                     help='learning rate (default: 0.0002)')
 parser.add_argument('--lr_gan', type=float, default=2e-5,
                     help='learning rate (default: 0.0002)')
@@ -28,6 +28,8 @@ parser.add_argument('--GAN', type=bool, default=False, metavar='N',
                     help='GAN train?')
 parser.add_argument('--only_black', type=bool, default=False, metavar='N',
                     help='only backward black canvas')
+parser.add_argument('--only_white', type=bool, default=False, metavar='N',
+                    help='only backward white canvas')
 args = parser.parse_args()
 
 if __name__ == '__main__':

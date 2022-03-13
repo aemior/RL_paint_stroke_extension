@@ -1,0 +1,6 @@
+python train_render.py --checkpoint_dir ./back_up/renders/watercolor_only_black --only_black YES --batch_size=256 --lr 2e-4 --StrokeType WaterColor --max_num_epochs 160;
+python train_render.py --checkpoint_dir ./back_up/renders/waterink_only_black --only_black YES --batch_size=256 --lr 2e-4 --StrokeType MyPaintWaterInk --max_num_epochs 160;
+python train_render.py --checkpoint_dir ./back_up/renders/oilpaint_only_black --only_black YES --batch_size=256 --lr 2e-4 --StrokeType OilPaint --max_num_epochs 160;
+python train_render.py --checkpoint_dir ./back_up/renders/watercolor_only_white --only_white YES --batch_size=256 --lr 2e-4 --StrokeType WaterColor --max_num_epochs 160;
+python train_render.py --checkpoint_dir ./back_up/renders/waterink_only_white --only_white YES --batch_size=256 --lr 2e-4 --StrokeType MyPaintWaterInk --max_num_epochs 160;
+python train_render.py --checkpoint_dir ./back_up/renders/oilpaint_only_white --only_white YES --batch_size=256 --lr 2e-4 --StrokeType OilPaint --max_num_epochs 160

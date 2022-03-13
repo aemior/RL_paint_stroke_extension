@@ -6,3 +6,6 @@
 /mypaint/mypaint-brushes
 /val_out*
 __pycache__/
+
+*.png
+*.tensor

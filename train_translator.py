@@ -3,8 +3,8 @@ from Utils import translatorTrain
 
 parser = argparse.ArgumentParser(description='Translator Training Program')
 parser.add_argument('--StrokeType', type=str, default=r'OilPaint', metavar='str',
-                    help='set stroke type:MyPaintWaterColor, MyPaintPencil, MyPaintCharcoal\
-						OilPaint, SimOilPaint')
+                    help='set stroke type:MyPaintWaterInk, MyPaintPencil, MyPaintCharcoal\
+						WaterColor, OilPaint')
 parser.add_argument('--TargetStroke', type=str, default=r'MyPaintWaterColor', metavar='str',
                     help='set stroke type:MyPaintWaterColor, MyPaintPencil, MyPaintCharcoal\
 						OilPaint, SimOilPaint')

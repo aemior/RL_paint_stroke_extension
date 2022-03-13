@@ -1,6 +1,7 @@
 import argparse
 import os
 import copy
+from PIL import Image, ImageOps
 
 import cv2
 import numpy as np
@@ -57,25 +58,27 @@ for i in range(128):
 coord = coord.to(device) # Coordconv
 T = torch.ones([1, 1, 128, 128], dtype=torch.float32).to(device)
 
-C_n = torch.zeros([1, 3, 128, 128]).to(device)
-C_r = np.zeros((128,128,3), np.uint8)
-C_r_L = np.zeros((512,512,3), np.uint8)
-img = cv2.imread(args.img)
-img = cv2.resize(img, (128, 128))
-img = img.reshape(1, 128, 128, 3)
-img = np.transpose(img, (0, 3, 1, 2))
-I = torch.tensor(img).to(device).float() / 255.
-
-N_process = []
-R_process = []
-
-import time
+#img_dir = '/home/ming/project/RL_paint_stroke_extension/dataset/orig_imgs'
+img_dir = '/home/ming/project/RL_paint_stroke_extension/dataset/merge'
+IMG_PATHS = [os.path.join(img_dir, i) for i in os.listdir(img_dir)]
 
 
 if not os.path.exists(args.save_path):
 	os.mkdir(args.save_path)
-if __name__ == '__main__':
-	t1 = time.time()
+
+for im_path in IMG_PATHS:
+	C_n = torch.zeros([1, 3, 128, 128]).to(device)
+	C_r = np.zeros((128,128,3), np.uint8)
+	C_r_L = np.zeros((512,512,3), np.uint8)
+	img = cv2.imread(im_path)
+	img = cv2.resize(img, (128, 128))
+	img = img.reshape(1, 128, 128, 3)
+	img = np.transpose(img, (0, 3, 1, 2))
+	I = torch.tensor(img).to(device).float() / 255.
+
+	N_process = []
+	R_process = []
+
 	for t in range(40):
 		t_N = T * t / 40
 		actions = agent(torch.cat([C_n, I, t_N, coord], 1))
@@ -83,16 +86,22 @@ if __name__ == '__main__':
 		C_r = RD(C_r, actions)
 		if args.StrokeType in ['WaterColor', 'OilPaint']:
 			C_r_L = RDL(C_r_L, actions)
-		if (t) % 5 == 0 or t in range(1,10):
+		#if (t+1) % 5 == 0 or t in range(0,10):
+		#if (t+1) % 5 == 0:
+		if t in [0,1,2,3,9,19,29,39]:
 			N_process.append(C_n.clone().detach().cpu())
-			R_s = np.transpose(C_r.reshape(1, 128, 128, 3), (0,3,1,2))
+			C_r_b = copy.deepcopy(C_r)
+			cv2.rectangle(C_r_b, (88, 115), (128, 128), (0,0,0), -1)
+			cv2.putText(C_r_b, 't='+str(t+1), (88,127), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
+			R_s = np.transpose(C_r_b.reshape(1, 128, 128, 3), (0,3,1,2))
 			R_process.append(torch.tensor(R_s.astype(np.float32)/255))
-	print("消耗时间", time.time()-t1)
 	vis_NeuralRender = make_numpy_grid(torch.cat(N_process))
 	vis_RealRender = make_numpy_grid(torch.cat(R_process))
-	IMG_NAME = args.save_path+args.img.split('/')[-1].split('.')[0]
+	IMG_NAME = args.save_path+im_path.split('/')[-1].split('.')[0]
 	cv2.imwrite(IMG_NAME+'.png', (vis_RealRender*255))
-	cv2.imwrite(IMG_NAME+'_L.png', (C_r_L*255))
+	#cv2.imwrite(IMG_NAME+'.png', C_r)
+	#if args.StrokeType in ['WaterColor', 'OilPaint']:
+	#	cv2.imwrite(IMG_NAME+'_L.png', (C_r_L*255))
 
 	
 
