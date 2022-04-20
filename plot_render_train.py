@@ -3,20 +3,19 @@
 """
 
 
-"""
 NAMES = {
-	'水彩':'back_up/oil_mse/checkpoints_R/val_acc.npy',
-	'水墨':'back_up/watercolor_mse/checkpoints_R/val_acc.npy',
-	'油画':'back_up/simoil_mse/checkpoints_R/val_acc.npy',
-	'铅笔':'back_up/pencil_mse/checkpoints_R/val_acc.npy',
-	'碳棒':'back_up/Charcoal_mse/checkpoints_R/val_acc.npy'
+	'水彩':'./back_up/renders/watercolor_mse/checkpoints_R/val_acc.npy',
+	'水墨':'./back_up/renders/waterink_mse/checkpoints_R/val_acc.npy',
+	'油画':'./back_up/renders/oilpaint_mse/checkpoints_R/val_acc.npy',
+	'铅笔':'./back_up/renders/pencil_mse/checkpoints_R/val_acc.npy',
+	'粉笔':'./back_up/renders/charcoal_mse/checkpoints_R/val_acc.npy'
 }
 LINESTY = {
 	'水彩':'o',
 	'水墨':'^',
 	'油画':'+',
 	'铅笔':'*',
-	'碳棒':'x'
+	'粉笔':'x'
 }
 """
 NAMES_3 = {
@@ -26,7 +25,6 @@ NAMES_3 = {
 	'黑白画板+栅格网络':'back_up/renders/oilpaint_only_ret/val_acc.npy',
 	'黑白画板+着色网络':'back_up/renders/oilpaint_only_shad/val_acc.npy'
 }
-"""
 LINESTY = {
 	'黑白画板+双路网络':'o',
 	'黑画板+双路网络':'^',
@@ -34,7 +32,6 @@ LINESTY = {
 	'黑白画板+栅格网络':'*',
 	'黑白画板+着色网络':'x'
 }
-"""
 
 NAMES_2 = {
 	'黑白画板+双路网络':'back_up/renders/watercolor_mse/checkpoints_R/val_acc.npy',
@@ -58,6 +55,7 @@ LINESTY = {
 	'黑白画板+着色网络':'x'
 }
 
+"""
 import numpy as np
 import matplotlib as mpl
 from matplotlib import pyplot as plt
@@ -65,20 +63,20 @@ from matplotlib import pyplot as plt
 mpl.rcParams[u'font.sans-serif'] = ['simhei']
 mpl.rcParams['axes.unicode_minus'] = False
 
-"""
 RAW_DATA = {}
 for i in NAMES.keys():
 	RAW_DATA[i] = np.load(NAMES[i])
 
-plt.figure(dpi=300, figsize=(4, 7))
-plt.title('水墨笔触')
+#plt.figure(dpi=300, figsize=(4, 7))
+plt.figure(dpi=300)
+#plt.title('水墨笔触')
 X_data = np.arange(1,151)
 for i in NAMES.keys():
 	plt.plot(X_data, RAW_DATA[i][:150], LINESTY[i], linestyle='-', markevery=8)
 
 
 plt.xlim((0, 150))
-plt.ylim((26, 38))
+#plt.ylim((26, 38))
 #my_y_ticks = np.arange(16, 36, 2)
 #plt.yticks(my_y_ticks)
 plt.xlabel('Epochs')
@@ -151,3 +149,5 @@ plt.ylim((16, 34))
 plt.legend(list(NAMES_3.keys()), loc=4)
 plt.grid()
 plt.show()
+
+"""

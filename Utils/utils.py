@@ -6,6 +6,7 @@ import torchvision.transforms.functional as TF
 import torch.nn as nn
 from torch.utils.data import Dataset,DataLoader
 from torchvision import utils
+from torch import autograd
 import lpips
 
 from Renders import RealRenders
@@ -151,3 +152,24 @@ def to_numpy(var):
 
 def to_tensor(ndarray, device):
     return torch.tensor(ndarray, dtype=torch.float, device=device)
+
+def calc_gradient_penalty(discriminator: nn.Module, real_data: torch.Tensor,
+                          fake_data: torch.Tensor, actions: torch.Tensor,
+                          device: torch.device, scale: float):
+    batch_size = real_data.shape[0]
+    epsilon = torch.rand(1, 1)
+    epsilon = epsilon.expand(batch_size, real_data.nelement()//batch_size).contiguous().view(batch_size, 3, 128, 128)
+    epsilon = epsilon.to(device)
+
+    interpolates = epsilon * real_data + ((1.0 - epsilon) * fake_data)
+    interpolates.requires_grad = True
+
+    disc_interpolates = discriminator(interpolates, actions)
+    gradients = autograd.grad(disc_interpolates, interpolates,
+                            grad_outputs=torch.ones_like(disc_interpolates),
+                            create_graph=True)[0]
+    gradients = gradients.view(batch_size, -1)
+
+    gradient_penalty = ((gradients.norm(2, dim=1) - 1) ** 2).mean() * scale
+
+    return gradient_penalty

@@ -1,15 +1,11 @@
-from turtle import forward
 import torch
-from torch._C import import_ir_module
 import torch.nn as nn
 from torch.nn import init
 import functools
-from torchvision import models
 import torch.nn.functional as F
-from torch.optim import lr_scheduler
 import math
-import matplotlib.pyplot as plt
-import numpy as np
+
+from Networks.stylegan_v2 import StyleRender
 
 PI = math.pi
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
@@ -100,6 +96,17 @@ def define_R(rddim, shape_dim, netR, init_type='normal', init_gain=0.02, gpu_ids
         net = PixelShuffleNet_4C(rddim)
     elif netR == 'only-shad':
         net = DCGAN_4C(rddim)
+    elif netR == 'NP-render':
+        net = NPGenerator(rddim)
+    elif netR == 'NP-dual':
+        net = NPDualPath(rddim)
+    elif netR == 'UP-conv':
+        net = UPPConv(rddim)
+    elif netR == 'Style-render':
+        net = StyleRender(rddim)
+    elif netR == 'BRM-render':
+        from Networks.ebrn import BRMRender
+        net = BRMRender(rddim)
     else:
         raise NotImplementedError('Generator model name [%s] is not recognized' % netR)
     return init_net(net, init_type, init_gain, gpu_ids)
@@ -284,3 +291,149 @@ class PixelShuffleNet_4C(nn.Module):
         x = self.pixel_shuffle(self.conv6(x))
         x = x.view(-1, 4, 128, 128)
         return x[:,:3,:,:], x[:,3,:,:].view(x.shape[0],1,128,128)
+
+class NPGenerator(nn.Module):
+  def __init__(self, action_size, dim=16, noise_dim=6, num_deterministic=0):
+    super(NPGenerator, self).__init__()
+    self.dim = dim
+    self.noise_dim = noise_dim
+    self.num_deterministic = num_deterministic
+
+    self.fc1 = nn.Linear(action_size + noise_dim, 4*4*(dim*16))  # This seems.. wrong.  Should it be dim*8?
+    self.bn1 = nn.BatchNorm2d(dim*16)
+    self.deconv1 = nn.ConvTranspose2d(dim*16, dim*8, 4, stride=2, padding=1)
+    self.bn2 = nn.BatchNorm2d(dim*8)
+    self.deconv2 = nn.ConvTranspose2d(dim*8, dim*4, 4, stride=2, padding=1)
+    self.bn3 = nn.BatchNorm2d(dim*4)
+    self.deconv3 = nn.ConvTranspose2d(dim*4, dim*2, 4, stride=2, padding=1)
+    self.bn4 = nn.BatchNorm2d(dim*2)
+    self.deconv4 = nn.ConvTranspose2d(dim*2, dim, 4, stride=2, padding=1)
+    self.bn5 = nn.BatchNorm2d(dim)
+    self.deconv5 = nn.ConvTranspose2d(dim, 4, 4, stride=2, padding=1)
+    self.leaky_relu = nn.LeakyReLU(negative_slope=0.2)
+
+  def forward(self, actions):
+    if self.noise_dim > 0:
+      batch_size = actions.shape[0]
+      noise_concat = torch.randn(batch_size, self.noise_dim - self.num_deterministic).to(actions.device)
+      actions = torch.cat([actions, noise_concat], dim=1)
+
+    x = self.fc1(actions)
+    x = x.view(-1, self.dim*16, 4, 4)
+    x = F.relu(self.bn1(x))
+    x = F.relu(self.bn2(self.deconv1(x)))
+    x = F.relu(self.bn3(self.deconv2(x)))
+    x = F.relu(self.bn4(self.deconv3(x)))
+    x = F.relu(self.bn5(self.deconv4(x)))
+    x = F.sigmoid(self.deconv5(x))
+    import pdb
+    pdb.set_trace()
+    x = x.view(-1, 4, 128, 128)
+    return x[:,:3,:,:], x[:,3,:,:].view(x.shape[0],1,128,128)
+
+class NPSinglePath(nn.Module):
+    def __init__(self, dim, out_dim):
+        super(NPSinglePath, self).__init__()
+        self.dim = dim
+        self.deconv5 = nn.ConvTranspose2d(dim, out_dim, 4, stride=2, padding=1)
+
+    def forward(self, x):
+        x = F.sigmoid(self.deconv5(x))
+        return x
+
+class NPDualPath(nn.Module):
+    def __init__(self, action_size, dim=16, noise_dim=6, num_deterministic=0):
+        super(NPDualPath, self).__init__()
+        self.dim = dim
+        self.noise_dim = noise_dim
+        self.num_deterministic = num_deterministic
+        self.fc1 = nn.Linear(action_size + noise_dim, 4*4*(dim*16))  # This seems.. wrong.  Should it be dim*8?
+        self.bn1 = nn.BatchNorm2d(dim*16)
+        self.deconv1 = nn.ConvTranspose2d(dim*16, dim*8, 4, stride=2, padding=1)
+        self.bn2 = nn.BatchNorm2d(dim*8)
+        self.deconv2 = nn.ConvTranspose2d(dim*8, dim*4, 4, stride=2, padding=1)
+        self.bn3 = nn.BatchNorm2d(dim*4)
+        self.deconv3 = nn.ConvTranspose2d(dim*4, dim*2, 4, stride=2, padding=1)
+        self.bn4 = nn.BatchNorm2d(dim*2)
+        self.deconv4 = nn.ConvTranspose2d(dim*2, dim, 4, stride=2, padding=1)
+        self.bn5 = nn.BatchNorm2d(dim)
+        self.ret = NPSinglePath(dim, 1)
+        self.shad = NPSinglePath(dim, 3)
+
+    def forward(self, actions):
+        if self.noise_dim > 0:
+            batch_size = actions.shape[0]
+            noise_concat = torch.randn(batch_size, self.noise_dim - self.num_deterministic).to(actions.device)
+            actions = torch.cat([actions, noise_concat], dim=1)
+
+        x = self.fc1(actions)
+        x = x.view(-1, self.dim*16, 4, 4)
+        x = F.relu(self.bn1(x))
+        x = F.relu(self.bn2(self.deconv1(x)))
+        x = F.relu(self.bn3(self.deconv2(x)))
+        x = F.relu(self.bn4(self.deconv3(x)))
+        x = F.relu(self.bn5(self.deconv4(x)))
+        return self.shad(x), self.ret(x)
+
+class UPBlock(nn.Module):
+    def __init__(self, input_channel, output_channel):
+        super().__init__()
+        self.up = nn.Upsample(scale_factor=2)
+        self.conv1 = nn.Conv2d(input_channel, input_channel, 3, 1, 1)
+        self.conv2 = nn.Conv2d(input_channel, output_channel, 3, 1, 1)
+        self.RGB = nn.Sequential(
+            nn.Conv2d(output_channel, 8, 3, 1, 1),
+            nn.Conv2d(8, 3, 1, 1, 0),
+        ) 
+        self.ALPHA = nn.Sequential(
+            nn.Conv2d(output_channel, 8, 3, 1, 1),
+            nn.Conv2d(8, 1, 1, 1, 0),
+        ) 
+
+    def to_res(self, x):
+        return torch.sigmoid(self.RGB(x)), torch.sigmoid(self.ALPHA(x))
+
+    def forward(self, x):
+        x = self.up(x)
+        x = self.conv1(x)
+        x = self.conv2(x)
+        return x
+
+class UPPConv(nn.Module):
+    def __init__(self, action_size, noise_dim=4, dim=16):
+        super().__init__()
+        self.noise_dim = noise_dim
+        self.dim = dim 
+        self.fc1 = nn.Linear(action_size+noise_dim, 4*4*dim)
+        self.conv1 = nn.Conv2d(dim, dim*2, 3, 1, 1)
+        self.main = nn.ModuleDict({
+            "L1":UPBlock(dim*2, dim*4), #8*8
+            "L2":UPBlock(dim*4, dim*8), #16*16
+            "L3":UPBlock(dim*8, dim*16), #32*32
+            "L4":UPBlock(dim*16, dim*8), #64*64
+            "L5":UPBlock(dim*8, dim*4) #128*128
+        })
+
+    def forward(self, actions, layer=None):
+        if self.noise_dim > 0:
+            batch_size = actions.shape[0]
+            noise_concat = torch.randn(batch_size, self.noise_dim).to(actions.device)
+            actions = torch.cat([actions, noise_concat], dim=1)
+
+        x = self.fc1(actions).view(-1,self.dim,4,4)
+        x = self.conv1(x)
+
+        if layer is None:
+            for layer_name, UPLayer in self.main.items():
+                x = UPLayer(x)
+            return self.main["L5"].to_res(x)
+        else:
+            for layer_name, UPLayer in self.main.items():
+                if layer_name == layer:
+                    break
+                x = UPLayer(x)
+            x = self.main[layer](x)
+            return self.main[layer].to_res(x)
+
+
+

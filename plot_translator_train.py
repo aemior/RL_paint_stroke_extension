@@ -3,16 +3,16 @@
 """
 
 NAMES = {
-	'水彩-水墨':'back_up/translator/oilpaint_watercolor/checkpoints_T/val_acc.npy',
-	'水彩-油画':'back_up/translator/oilpaint_simoilpaint/checkpoints_T/val_acc.npy',
-	'水彩-铅笔':'back_up/translator/oilpaint_pencil/checkpoints_T/val_acc.npy',
-	'水彩-碳棒':'back_up/translator/oilpaint_charcoal/checkpoints_T_charcoal/val_acc.npy'
+	'水彩-水墨':'./back_up/translator/watercolor_waterink/checkpoints_T/val_acc.npy',
+	'水彩-油画':'./back_up/translator/watercolor_oilpaint/checkpoints_T/val_acc.npy',
+	'水彩-铅笔':'back_up/translator/watercolor_pencil/checkpoints_T/val_acc.npy',
+	'水彩-粉笔':'back_up/translator/watercolor_charcoal/checkpoints_T_charcoal/val_acc.npy'
 }
 LINESTY = {
 	'水彩-水墨':'^',
 	'水彩-油画':'+',
 	'水彩-铅笔':'*',
-	'水彩-碳棒':'x'
+	'水彩-粉笔':'x'
 }
 
 import numpy as np

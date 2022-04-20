@@ -98,10 +98,10 @@ for im_path in IMG_PATHS:
 	vis_NeuralRender = make_numpy_grid(torch.cat(N_process))
 	vis_RealRender = make_numpy_grid(torch.cat(R_process))
 	IMG_NAME = args.save_path+im_path.split('/')[-1].split('.')[0]
-	cv2.imwrite(IMG_NAME+'.png', (vis_RealRender*255))
+	#cv2.imwrite(IMG_NAME+'.png', (vis_RealRender*255))
 	#cv2.imwrite(IMG_NAME+'.png', C_r)
 	#if args.StrokeType in ['WaterColor', 'OilPaint']:
-	#	cv2.imwrite(IMG_NAME+'_L.png', (C_r_L*255))
+	cv2.imwrite(IMG_NAME+'_L.png', C_r_L)
 
 	
 

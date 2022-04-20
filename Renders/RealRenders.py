@@ -42,7 +42,7 @@ class SNPStroke(object):
 	def __init__(self, cw=128, BrushType='oilpaintbrush'):
 		if BrushType=='oilpaintbrush':
 			self.action_size = 12
-		elif BrushType=='markpen':
+		elif BrushType=='markerpen':
 			self.action_size = 12
 		elif BrushType=='rectangle':
 			self.action_size = 9

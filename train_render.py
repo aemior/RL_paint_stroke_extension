@@ -18,23 +18,30 @@ parser.add_argument('--vis_dir', type=str, default=r'./val_out_R', metavar='str'
                     help='dir to save results during training (default: ./val_out_R)')
 parser.add_argument('--lr', type=float, default=2e-4,
                     help='learning rate (default: 0.0002)')
-parser.add_argument('--lr_gan', type=float, default=2e-5,
+parser.add_argument('--lr_gan', type=float, default=2e-4,
                     help='learning rate (default: 0.0002)')
-parser.add_argument('--max_num_epochs', type=int, default=1000, metavar='N',
+parser.add_argument('--max_num_epochs', type=int, default=500, metavar='N',
                     help='max number of training epochs (default 400)')
 parser.add_argument('--vis_port', type=int, default=0, metavar='N',
                     help='Visdom port')
 parser.add_argument('--GAN', type=bool, default=False, metavar='N',
                     help='GAN train?')
+parser.add_argument('--debug', type=bool, default=False, metavar='N',
+                    help='debug?')
 parser.add_argument('--only_black', type=bool, default=False, metavar='N',
                     help='only backward black canvas')
 parser.add_argument('--only_white', type=bool, default=False, metavar='N',
                     help='only backward white canvas')
+parser.add_argument('--rand_c', type=bool, default=False, metavar='N',
+                    help='noise canvas')
 args = parser.parse_args()
 
 if __name__ == '__main__':
 	if args.GAN:
 		T = renderTrain.DisTrain(args)
 	else:
-		T = renderTrain.Train(args)
+		if args.net_R == 'Style-render':
+			T = renderTrain.StyTrain(args)
+		else:
+			T = renderTrain.Train(args)
 	T.train()
