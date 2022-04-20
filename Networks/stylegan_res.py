@@ -10,7 +10,7 @@ import torch.nn.functional as F
 import math
 
 PI = math.pi
-device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 class ResBlock(nn.Module):
     def __init__(self, std_channel, inner_channel, w_dim, top=False):
@@ -92,7 +92,7 @@ class SRRender(nn.Module):
             "L2":ResBlock(dim*2, dim*4, w_dim=w_dim), #16*16
             "L3":ResBlock(dim*2, dim*8, w_dim=w_dim), #32*32
             "L4":ResBlock(dim*2, dim*4, w_dim=w_dim), #64*64
-            "L5":ResBlock(dim*2, dim*2, w_dim=w_dim) #128*128
+            "L5":ResBlock(dim*2, dim*2, w_dim=w_dim, top=True) #128*128
         })
         self.Up = nn.ModuleDict({
             "L1":nn.Sequential(
@@ -119,10 +119,10 @@ class SRRender(nn.Module):
             "L4":nn.Conv2d(dim*2, dim*2, 3, 1, 1),
         })
         self.to_rgb = nn.Sequential(
-            nn.Conv2d(dim*4, 3, 1, 1, 0),
+            nn.Conv2d(dim*2*5, 3, 1, 1, 0),
         )
         self.to_alpha = nn.Sequential(
-            nn.Conv2d(dim*4, 1, 1, 1, 0),
+            nn.Conv2d(dim*2*5, 1, 1, 1, 0),
         )
         self.list = ["L1", "L2", "L3", "L4", "L5"]
 

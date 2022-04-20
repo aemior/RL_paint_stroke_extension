@@ -13,7 +13,7 @@ from Utils.utils import get_neural_render,get_stroke_dataset,get_translator
 import Utils.utils as utils
 
 # Decide which device we want to run on
-device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 
 class Train(object):

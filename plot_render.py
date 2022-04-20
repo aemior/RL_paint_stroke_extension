@@ -23,7 +23,7 @@ parser.add_argument('--save_path', type=str, default=r'./', metavar='str',
                     help='dir to save Res')
 args = parser.parse_args()
 
-device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 if not os.path.exists(args.save_path):
 	os.mkdir(args.save_path)
 if __name__ == '__main__':

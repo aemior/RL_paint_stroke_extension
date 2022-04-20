@@ -8,7 +8,7 @@ import torch
 
 from Utils.utils import cpt_batch_psnr, LPIPS_loss
 
-device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 lpips_cal =  LPIPS_loss(device)
 
 parser = argparse.ArgumentParser(description='计算两个文件夹中图片的PSNR、MSE、LPIPS，文件夹内图片的名称必须一一对应')

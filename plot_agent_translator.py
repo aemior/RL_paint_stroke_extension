@@ -10,7 +10,7 @@ from Networks.actor import ResNet
 from Networks.render import define_R
 from Utils.utils import RealDecoder_T, get_translator,make_numpy_grid,ACTION_SHAPESIZE,ACTION_SIZE
 
-device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 parser = argparse.ArgumentParser(description='使用翻译器的绘画过程')
 parser.add_argument('--StrokeType', type=str, default=r'MyPaintWaterColor', metavar='str',

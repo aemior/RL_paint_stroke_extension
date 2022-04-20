@@ -8,7 +8,7 @@ import torch.nn.functional as F
 import math
 
 PI = math.pi
-device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 class StyleBlock(nn.Module):
     def __init__(self, input_channel, output_channel, w_dim):

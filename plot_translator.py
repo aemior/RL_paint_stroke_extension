@@ -25,7 +25,7 @@ parser.add_argument('--save_path', type=str, default=r'./', metavar='str',
 
 args = parser.parse_args()
 
-device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 if __name__ == '__main__':
 	translator = get_translator(args)
 	translator.load_state_dict(torch.load(args.t_path)['model_T_state_dict'])
