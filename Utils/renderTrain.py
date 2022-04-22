@@ -1,6 +1,6 @@
 import os
 import resource
-from turtle import forward, pd
+from turtle import backward, forward, pd
 
 import torch
 import torch.optim as optim
@@ -227,6 +227,46 @@ class Train(object):
             self._collect_epoch_states()
             self._update_lr_sechedulers()
             self._update_checkpoints()
+
+
+class IRTrain(Train):
+    def _forward_pass(self, batch):
+        self.batch = batch
+        self.z_in = batch['A'].to(device)
+        pred_foreground, pred_alpha, reg = self.render(self.z_in)
+        gt_foreground, gt_alpha = self.batch['B'].to(device),self.batch['ALPHA'].to(device)
+        if self.rand_c:
+            C_R = torch.rand(pred_foreground.shape).to(device)
+            self.PD_C_R = (1-pred_alpha) * C_R + pred_alpha * pred_foreground
+            self.GT_C_R = (1-gt_alpha) * C_R + gt_alpha * gt_foreground
+        self.REG = reg
+        self.PD_C_B = pred_alpha * pred_foreground
+        self.PD_C_W = (1-pred_alpha) + pred_alpha * pred_foreground
+        self.old_GT_C_B = self.GT_C_B
+        self.old_GT_C_W = self.GT_C_W
+        self.GT_C_B = gt_alpha * gt_foreground
+        self.GT_C_W = (1-gt_alpha) + gt_alpha * gt_foreground 
+    def _backward_R(self):
+        pixel_loss1 = self._pxl_loss(self.PD_C_B, self.GT_C_B)
+        pixel_loss2 = self._pxl_loss(self.PD_C_W, self.GT_C_W)
+        if self.only_black and not self.only_white:
+            self.LOSS['R_loss'] = pixel_loss1
+        elif self.only_white and not self.only_black:
+            self.LOSS['R_loss'] = pixel_loss2
+        elif self.rand_c:
+            pixel_loss3 = self._pxl_loss(self.PD_C_R, self.GT_C_R)
+            self.LOSS['R_loss'] = pixel_loss3
+            self.LOSS['RCR_loss'] = pixel_loss3
+        else:
+            self.LOSS['R_loss'] = pixel_loss1 + pixel_loss2
+        self.LOSS['RCW_loss'] = pixel_loss2
+        self.LOSS['RCB_loss'] = pixel_loss1
+        self.LOSS['REG_term'] = self.REG
+        (self.LOSS['R_loss'] + 0.3 * self.REG).backward()
+        
+
+        
+
 
 
 class DisTrain(Train):
@@ -503,11 +543,15 @@ class PgTrain(Train):
                 self.optimizer_R.step()
                 self._collect_running_batch_states()
             self._collect_epoch_states()
+            if self.epoch_id >= 250:
+                self._update_lr_sechedulers()
             self._update_checkpoints()
 
 MINI_LR = 2e-6
 class StyTrain(PgTrain):
     def set_optimizer(self):
+        if self.keep:
+            return
         if self.cur_layer == "L1":
             self.optimizer_R = optim.Adam([{"params":self.render.const},\
                                            {"params":self.render.MapNet.parameters()},\
@@ -531,13 +575,10 @@ class StyTrain(PgTrain):
                         {"params":self.render.main.L3.parameters()},\
                         {"params":self.render.main.L4.parameters()}], self.lr)
         elif self.cur_layer == "L5":
-            self.optimizer_R = optim.Adam([{"params":self.render.const},\
-                        {"params":self.render.MapNet.parameters()},\
-                        {"params":self.render.main.L1.parameters()},\
-                        {"params":self.render.main.L2.parameters()},\
-                        {"params":self.render.main.L3.parameters()},\
-                        {"params":self.render.main.L4.parameters()},\
-                        {"params":self.render.main.L5.parameters()}], self.lr)
+            self.optimizer_R = optim.Adam(self.render.parameters(), lr=self.lr, betas=(0.9,0.999))
+            self.exp_lr_scheduler_R = lr_scheduler.StepLR(
+                self.optimizer_R, step_size=50, gamma=0.1
+            )
         """
         elif self.cur_layer == "L2":
             self.optimizer_R = optim.Adam([{"params":self.render.const, 'lr': MINI_LR},\

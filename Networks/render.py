@@ -110,6 +110,9 @@ def define_R(rddim, shape_dim, netR, init_type='normal', init_gain=0.02, gpu_ids
     elif netR == 'Res-render':
         from Networks.stylegan_res import SRRender
         net = SRRender(rddim)
+    elif netR == 'MB-render':
+        from Networks.multiband import MBRender
+        net = MBRender(rddim)
     else:
         raise NotImplementedError('Generator model name [%s] is not recognized' % netR)
     return init_net(net, init_type, init_gain, gpu_ids)
