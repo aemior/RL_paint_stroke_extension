@@ -1,4 +1,6 @@
 import time
+import os
+from turtle import forward
 
 import numpy as np
 import torch
@@ -8,6 +10,7 @@ from torch.utils.data import Dataset,DataLoader
 from torchvision import utils
 from torch import autograd
 import lpips
+from zmq import device
 
 from Renders import RealRenders
 from Networks.render import define_R
@@ -60,15 +63,19 @@ def get_stroke_dataset(args):
 	training_set = StrokeDataset(args, is_train=True)
 
 	dataloader = DataLoader(training_set, batch_size=args.batch_size,\
-									shuffle=True, num_workers=6, worker_init_fn= worker_init_fn_seed)
+									shuffle=False, num_workers=6)#worker_init_fn= worker_init_fn_seed)
 	return dataloader
 
 def get_neural_render(stroke_type, net_R):
 	return define_R(rddim=ACTION_SIZE[stroke_type],\
 		 shape_dim=ACTION_SHAPESIZE[stroke_type], netR=net_R)
 
-def get_discriminator(stroke_type):
-	return define_D(ACTION_SIZE[stroke_type])
+def get_discriminator(args):
+	from Networks.Discriminator import PatchDiscriminator
+	netD = PatchDiscriminator()
+	netD.load_state_dict(torch.load(os.path.join(args.checkpoint_dir, 'wgan.pkl')))
+	return netD
+	#return define_D(ACTION_SIZE[stroke_type])
 
 def get_translator(args):
 	return define_T(ACTION_SIZE[args.StrokeType], ACTION_SIZE[args.TargetStroke], "FCN4L")
@@ -110,6 +117,16 @@ class RealDecoder(object):
 		alpha = stroke[:,:,3].reshape(self.cw,self.cw,1)
 		canvas = canvas * (1-alpha) + stroke[:,:,:3] * alpha
 		return (np.clip(canvas, 0, 1) * 255).astype(np.uint8)
+	def batch_stroke(self, actions):
+		actions = actions.detach().cpu().numpy()
+		foreground = np.zeros((actions.shape[0], 3, self.cw, self.cw)).astype(np.float32)
+		alpha = np.zeros((actions.shape[0], 1, self.cw, self.cw)).astype(np.float32)
+		for i in range(actions.shape[0]):
+			stroke = self.RENDER.SingleStroke(actions[i]).astype(np.float32) / 255
+			foreground[i] = np.transpose(stroke[:,:,:3].reshape((self.cw, self.cw, 3)), (2,0,1))
+			alpha[i] = stroke[:,:,3]
+		return torch.tensor(foreground), torch.tensor(alpha)
+
 
 class RealDecoder_T(RealDecoder):
 	def __init__(self, args, cw=128):
@@ -128,6 +145,18 @@ class LPIPS_loss(nn.Module):
 		x = x * 2 - 1
 		y = y * 2 - 1
 		return self.lpips_model(x, y).mean()
+
+
+class PatchGan_loss(nn.Module):
+	def __init__(self, args, device):
+		super().__init__()
+		from Networks.Discriminator import PatchDiscriminator
+		self.netD = PatchDiscriminator()
+		self.netD.load_state_dict(torch.load(os.path.join(args.checkpoint_dir, 'wgan.pkl')))
+		self.netD = self.netD.to(device)
+	def forward(self, x, y):
+		data = torch.cat((x,y), dim=1)
+		return (-self.netD(data)).mean()
 
 def cpt_batch_psnr(img, img_gt, PIXEL_MAX):
     mse = torch.mean((img - img_gt) ** 2)
@@ -172,4 +201,29 @@ def calc_gradient_penalty(discriminator: nn.Module, real_data: torch.Tensor,
 
     gradient_penalty = ((gradients.norm(2, dim=1) - 1) ** 2).mean() * scale
 
+    return gradient_penalty
+
+
+from torch import autograd
+from torch.autograd import Variable
+import torch.nn.functional as F
+from torch.autograd import grad as torch_grad
+import torch.nn.utils.weight_norm as weightNorm
+
+dim = 128
+LAMBDA = 10 # Gradient penalty lambda hyperparameter
+
+def cal_gradient_penalty(netD, real_data, fake_data, batch_size, device):
+    alpha = torch.rand(batch_size, 1)
+    alpha = alpha.expand(batch_size, int(real_data.nelement()/batch_size)).contiguous()
+    alpha = alpha.view(batch_size, 6, dim, dim)
+    alpha = alpha.to(device)
+    fake_data = fake_data.view(batch_size, 6, dim, dim)
+    interpolates = Variable(alpha * real_data.data + ((1 - alpha) * fake_data.data), requires_grad=True)
+    disc_interpolates = netD(interpolates)
+    gradients = autograd.grad(disc_interpolates, interpolates,
+                              grad_outputs=torch.ones(disc_interpolates.size()).to(device),
+                              create_graph=True, retain_graph=True)[0]
+    gradients = gradients.view(gradients.size(0), -1)
+    gradient_penalty = ((gradients.norm(2, dim=1) - 1) ** 2).mean() * LAMBDA
     return gradient_penalty

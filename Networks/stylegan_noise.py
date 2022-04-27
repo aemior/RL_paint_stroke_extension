@@ -116,34 +116,6 @@ class StyleRender(nn.Module):
             else:
                 return x
 
-class MappingLight(nn.Module):
-    def __init__(self, action_size, w_dim=512):
-        super().__init__()
-        self.map = nn.Sequential(
-            nn.Linear(action_size, 512),
-            nn.LeakyReLU(),
-            nn.Linear(512, 512),
-            nn.LeakyReLU(),
-            nn.Linear(512, 512),
-            nn.LeakyReLU(),
-            nn.Linear(512, w_dim),
-            nn.LeakyReLU()
-        )
-    def forward(self, x):
-        return self.map(x)
-class StyleLight(StyleRender):
-    def __init__(self, action_size, noise_dim=4, dim=32, w_dim=512):
-        super().__init__(action_size, noise_dim, dim, w_dim)
-        self.MapNet = MappingLight(action_size, w_dim=w_dim)
-        self.main = nn.ModuleDict({
-            "L1":StyleBlock(dim*16, dim*16, w_dim=w_dim), #8*8 /32 init
-            "L2":StyleBlock(dim*16, dim*8, w_dim=w_dim), #16*16
-            "L3":StyleBlock(dim*8, dim*4, w_dim=w_dim), #32*32
-            "L4":StyleBlock(dim*4, dim*2, w_dim=w_dim), #64*64
-            "L5":StyleBlock(dim*2, dim*2, w_dim=w_dim) #128*128
-        })
-
-
 
 def ins_nor(feat):
     size = feat.size()

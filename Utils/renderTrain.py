@@ -10,7 +10,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import visdom
 
-from Utils.utils import get_neural_render,get_stroke_dataset,get_discriminator,calc_gradient_penalty
+from Utils.utils import get_neural_render,get_stroke_dataset,get_discriminator,calc_gradient_penalty,cal_gradient_penalty
 import Utils.utils as utils
 
 # Decide which device we want to run on
@@ -48,6 +48,9 @@ class Train(object):
             self.optimizer_R, step_size=100, gamma=0.1
         )
         self._pxl_loss = torch.nn.MSELoss()
+        if args.patch_gan_loss:
+            from Utils.utils import PatchGan_loss
+            self._pxl_loss = PatchGan_loss(args, device)
         self.only_black = args.only_black
         self.only_white = args.only_white
         self.rand_c = args.rand_c
@@ -109,6 +112,7 @@ class Train(object):
             C_R = torch.rand(pred_foreground.shape).to(device)
             self.PD_C_R = (1-pred_alpha) * C_R + pred_alpha * pred_foreground
             self.GT_C_R = (1-gt_alpha) * C_R + gt_alpha * gt_foreground
+            return
         self.PD_C_B = pred_alpha * pred_foreground
         self.PD_C_W = (1-pred_alpha) + pred_alpha * pred_foreground
         self.old_GT_C_B = self.GT_C_B
@@ -118,16 +122,18 @@ class Train(object):
 
     def _backward_R(self):
 
+        if self.rand_c:
+            pixel_loss3 = self._pxl_loss(self.PD_C_R, self.GT_C_R)
+            self.LOSS['R_loss'] = pixel_loss3
+            self.LOSS['RCR_loss'] = pixel_loss3
+            self.LOSS['R_loss'].backward()
+            return
         pixel_loss1 = self._pxl_loss(self.PD_C_B, self.GT_C_B)
         pixel_loss2 = self._pxl_loss(self.PD_C_W, self.GT_C_W)
         if self.only_black and not self.only_white:
             self.LOSS['R_loss'] = pixel_loss1
         elif self.only_white and not self.only_black:
             self.LOSS['R_loss'] = pixel_loss2
-        elif self.rand_c:
-            pixel_loss3 = self._pxl_loss(self.PD_C_R, self.GT_C_R)
-            self.LOSS['R_loss'] = pixel_loss3
-            self.LOSS['RCR_loss'] = pixel_loss3
         else:
             self.LOSS['R_loss'] = pixel_loss1 + pixel_loss2
         self.LOSS['RCW_loss'] = pixel_loss2
@@ -156,19 +162,28 @@ class Train(object):
             print("<")
 
             if self.is_VIS:
-                self.vis.images(self.GT_C_B, win='GT_C_B')
-                self.vis.images(self.PD_C_B, win='PD_C_B')
-                self.vis.images(self.GT_C_W, win='GT_C_W')
-                self.vis.images(self.PD_C_W, win='PD_C_W')
+                if self.rand_c:
+                    self.vis.images(self.GT_C_R, win='GT_C_R')
+                    self.vis.images(self.PD_C_R, win='PD_C_R')
+                else:
+                    self.vis.images(self.GT_C_B, win='GT_C_B')
+                    self.vis.images(self.PD_C_B, win='PD_C_B')
+                    self.vis.images(self.GT_C_W, win='GT_C_W')
+                    self.vis.images(self.PD_C_W, win='PD_C_W')
 
         if np.mod(self.batch_id, 1000) == 1:
-            vis_pred_foreground = utils.make_numpy_grid(self.GT_C_B)
-            vis_gt_foreground = utils.make_numpy_grid(self.PD_C_B)
-            vis_pred_alpha = utils.make_numpy_grid(self.GT_C_W)
-            vis_gt_alpha = utils.make_numpy_grid(self.PD_C_W)
+            if self.rand_c:
+                vis_pred = utils.make_numpy_grid(self.PD_C_R)
+                vis_gt = utils.make_numpy_grid(self.GT_C_R)
+                vis = np.concatenate([vis_gt, vis_pred], axis=0)
+            else:
+                vis_pred_foreground = utils.make_numpy_grid(self.GT_C_B)
+                vis_gt_foreground = utils.make_numpy_grid(self.PD_C_B)
+                vis_pred_alpha = utils.make_numpy_grid(self.GT_C_W)
+                vis_gt_alpha = utils.make_numpy_grid(self.PD_C_W)
 
-            vis = np.concatenate([vis_pred_foreground, vis_gt_foreground,
-                                    vis_pred_alpha, vis_gt_alpha], axis=0)
+                vis = np.concatenate([vis_pred_foreground, vis_gt_foreground,
+                                        vis_pred_alpha, vis_gt_alpha], axis=0)
             vis = np.clip(vis, a_min=0.0, a_max=1.0)
             file_name = os.path.join(
                 self.vis_dir, 'istrain_'+str(self.is_training)+'_'+
@@ -176,6 +191,11 @@ class Train(object):
             plt.imsave(file_name, vis)
 
     def _compute_acc(self):
+        if self.rand_c:
+            target_C_R = self.GT_C_R.to(device).detach()
+            C_R = self.PD_C_R.detach()
+            psnr = utils.cpt_batch_psnr(C_R, target_C_R, PIXEL_MAX=1.0)
+            return psnr
         target_C_B = self.GT_C_B.to(device).detach()
         target_C_W = self.GT_C_W.to(device).detach()
         C_B = self.PD_C_B.detach()
@@ -272,9 +292,10 @@ class IRTrain(Train):
 class DisTrain(Train):
     def __init__(self, args):
         super().__init__(args)
-        self.D = get_discriminator(args.StrokeType).to(device)
+        #self.D = get_discriminator(args.StrokeType).to(device)
+        self.D = get_discriminator(args).to(device)
 
-        self.optimizer_D = optim.Adam(self.D.parameters(), lr=args.lr_gan, betas=(0.9,0.999))
+        self.optimizer_D = optim.Adam(self.D.parameters(), lr=args.lr_gan, betas=(0.5,0.999))
         self.exp_lr_scheduler_D = lr_scheduler.StepLR(
             self.optimizer_D, step_size=100, gamma=0.1
         )
@@ -298,11 +319,13 @@ class DisTrain(Train):
             self.D.to(device)
 
         else:
+            """
             if os.path.exists(os.path.join(self.render_ckpt, 'last_ckpt.pt')):
                 print("# load pretrain render checkpoint..")
                 checkpoint = torch.load(os.path.join(self.render_ckpt, 'last_ckpt.pt'))
                 self.render.load_state_dict(checkpoint['model_R_state_dict'])
                 self.render.to(device)
+            """
             print('# training D from scratch...')
 
     def _save_D_checkpoint(self, ckpt_name):
@@ -314,63 +337,25 @@ class DisTrain(Train):
 
     def forward_pass_D(self):
 
-        #self.D.set_cond(self.z_in)
-        self.D_pd_real_W = self.D(self.GT_C_W, self.z_in)
-        self.D_pd_fake_W = self.D(self.PD_C_W, self.z_in)
-        #self.D_pd_real_B = self.D(self.GT_C_B)
-        #self.D_pd_fake_B = self.D(self.PD_C_B)
-        if self.old_GT_C_B.shape[0] != self.GT_C_B.shape[0]:
-            other_C_B = self.old_GT_C_B[:self.GT_C_B.shape[0]]
-        else:
-            other_C_B = self.old_GT_C_B
-        #other_C_W = (1-other_alpha) + other_alpha * other_foreground 
-        #self.D_pd_cond_B = self.D(other_C_B)
+        self.real_batch = torch.cat((torch.cat((self.GT_C_W, self.GT_C_B)), torch.cat((self.GT_C_W, self.GT_C_B))), dim=1)
+        self.fake_batch = torch.cat((torch.cat((self.GT_C_W, self.GT_C_B)), torch.cat((self.PD_C_W, self.PD_C_B))), dim=1)
+        self.D_pd_real = self.D(self.real_batch)
+        self.D_pd_fake = self.D(self.fake_batch)
+        self.gradient_penalty = cal_gradient_penalty(self.D, self.real_batch, self.fake_batch, self.D_pd_real.shape[0], device)
 
     def _backward_D(self):
-        #loss_real = self.D_pd_real_B.mean() + self.D_pd_real_W.mean()
-        #loss_fake = self.D_pd_fake_B.mean() + self.D_pd_fake_W.mean()
-        loss_real = self.D_pd_real_W.mean()
-        loss_fake = self.D_pd_fake_W.mean()
-        #loss_bc = self.D_pd_cond_B.mean()
-        #loss_real = torch.log(self.D_pd_real_B).mean()# + self.D_pd_real_W.mean()
-        #loss_fake = torch.log(1-self.D_pd_fake_B).mean()# + self.D_pd_fake_W.mean()
-        #loss_bc = torch.log(1-self.D_pd_cond_B).mean()
-        #self.LOSS['D_loss'] = loss_real - 0.5 * (loss_fake + loss_bc)
-        self.LOSS['D_loss'] = loss_real - loss_fake
-        self.LOSS['WGAN_loss'] = self.LOSS['D_loss'] + \
-            calc_gradient_penalty(self.D, self.GT_C_W, self.PD_C_W, self.z_in,\
-                 device, 10.0)
-        #self.LOSS['D_loss'] = loss_real + loss_fake + loss_bc
-        #self.LOSS['D_loss'].backward()
-        self.LOSS['WGAN_loss'].backward()
-        #self.DLOSS['D_loss'] = self.LOSS['D_loss'] 
+        loss_real = self.D_pd_real.mean()
+        loss_fake = self.D_pd_fake.mean()
+        self.LOSS['D_loss'] = loss_fake - loss_real + self.gradient_penalty
         self.DLOSS['D_fake'] = loss_fake
         self.DLOSS['D_real'] = loss_real
-        #self.DLOSS['D_mismatch'] = loss_bc
+        self.DLOSS['D_penalty'] = self.gradient_penalty
+        self.LOSS['D_loss'].backward()
 
     def _backward_R(self):
 
-        #dloss_w = self.D(self.PD_C_W)
-        pixel_loss1 = self._pxl_loss(self.PD_C_B, self.GT_C_B)
-        pixel_loss2 = self._pxl_loss(self.PD_C_W, self.GT_C_W)
-        #self.D.set_cond(self.z_in)
-        #dloss_b = self.D(self.PD_C_B)
-        dloss_w = self.D(self.PD_C_W, self.z_in)
-        #self.RLOSS['d_loss'] = 25e-5 * (dloss_b.mean() + dloss_w.mean())
-        self.RLOSS['d_loss'] = dloss_w.mean()
-        self.RLOSS['pixel_loss_W'] = pixel_loss2
-        self.RLOSS['pixel_loss_B'] = pixel_loss1
-        m = len(self.dataloader)
-        batch_total = m*self.epoch_id+self.batch_id
-        if batch_total < 500000:
-            reconstruction_loss_mult = 10.
-        elif batch_total < 550000:
-            reconstruction_loss_mult = 10.
-        else:
-            reconstruction_loss_mult = 10.
-        #self.LOSS['R_loss'] = pixel_loss1 + pixel_loss2
-        self.LOSS['R_loss'] = reconstruction_loss_mult *(pixel_loss1 + pixel_loss2)\
-             + self.RLOSS['d_loss']
+        self.fake_batch = torch.cat((torch.cat((self.GT_C_W, self.GT_C_B)), torch.cat((self.PD_C_W, self.PD_C_B))), dim=1)
+        self.LOSS['R_loss'] = (-self.D(self.fake_batch)).mean()
         self.LOSS['R_loss'].backward()
     
     def _update_lr_sechedulers(self):
@@ -437,14 +422,34 @@ class DisTrain(Train):
                 if False:#self.epoch_id < 3:
                     self.update_D(batch)
                 else:
-                    if (self.batch_id) % 3 == 0:
-                        self.update_R(batch)
-                    else:
+                    if (self.batch_id) % 2 == 0:
                         self.update_D(batch)
+                    else:
+                        self.update_R(batch)
                 self._collect_running_batch_states()
             self._collect_epoch_states()
             self._update_lr_sechedulers()
             self._update_checkpoints()
+    def LoadCheckPoint(self):
+        if os.path.exists(os.path.join(self.checkpoint_dir, 'last_ckpt.pt')):
+            print('# loading last checkpoint R...')
+            # load the entire checkpoint
+            checkpoint = torch.load(os.path.join(self.checkpoint_dir, 'last_ckpt.pt'))
+
+            # update render states
+            self.render.load_state_dict(checkpoint['model_R_state_dict'])
+            self.render.to(device)
+
+            # update some other states
+            self.epoch_to_start = checkpoint['epoch_id'] + 1
+            self.best_val_acc = checkpoint['best_val_acc']
+            self.best_epoch_id = checkpoint['best_epoch_id']
+
+            print('Epoch_to_start = %d, Historical_best_acc = %.4f (at epoch %d)' %
+                    (self.epoch_to_start, self.best_val_acc, self.best_epoch_id))
+
+        else:
+            print('# training from scratch...')
 
 
     
@@ -536,6 +541,7 @@ class PgTrain(Train):
             self.is_training = True
             self.render.train()
             self.set_optimizer()
+            print("Current Layer:", self.cur_layer, "Keep:", self.keep)
             for self.batch_id, batch in enumerate(self.dataloader, 0):
                 self._forward_pass(batch)
                 self.optimizer_R.zero_grad()

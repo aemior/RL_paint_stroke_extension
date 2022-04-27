@@ -5,7 +5,7 @@ import functools
 import torch.nn.functional as F
 import math
 
-from Networks.stylegan_v2 import StyleRender
+from Networks.stylegan_v2 import StyleLight, StyleRender
 
 PI = math.pi
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -104,6 +104,12 @@ def define_R(rddim, shape_dim, netR, init_type='normal', init_gain=0.02, gpu_ids
         net = UPPConv(rddim)
     elif netR == 'Style-render':
         net = StyleRender(rddim)
+    elif netR == 'Style-light':
+        from Networks.stylegan_v2 import StyleLight
+        net = StyleLight(rddim)
+    elif netR == 'Style-Light':
+        from Networks.stylegan_light import StyleRenderLight
+        net = StyleRenderLight(rddim)
     elif netR == 'BRM-render':
         from Networks.ebrn import BRMRender
         net = BRMRender(rddim)

@@ -4,7 +4,7 @@ import os
 import torch
 import matplotlib.pyplot as plt
 
-from Utils.utils import get_neural_render,get_stroke_dataset,make_numpy_grid
+from Utils.utils import RealDecoder, get_neural_render,get_stroke_dataset,make_numpy_grid
 
 parser = argparse.ArgumentParser(description='展示渲染器的渲染结果')
 parser.add_argument('--StrokeType', type=str, default=r'MyPaintWaterColor', metavar='str',
@@ -33,13 +33,22 @@ if __name__ == '__main__':
 	NeuralRender.eval().to(device)
 	dataloader = get_stroke_dataset(args) 
 
-	batch = next(iter(dataloader))
-	
-	gt_foreground, gt_alpha = batch['B'].to(device), batch['ALPHA'].to(device)
+	if os.path.exists('./'+args.StrokeType+'.tensor'):
+		action = torch.load('./'+args.StrokeType+'.tensor')
+		a_in = action.to(device)
+		RD = RealDecoder(args)
+		gt_foreground, gt_alpha = RD.batch_stroke(a_in)
+		gt_foreground = gt_foreground.to(device)
+		gt_alpha = gt_alpha.to(device)
+	else:
+		batch = next(iter(dataloader))
+		torch.save(batch['A'], './'+args.StrokeType+'.tensor')
+		gt_foreground, gt_alpha = batch['B'].to(device), batch['ALPHA'].to(device)
+		a_in = batch['A'].to(device)
+
 	GT_C_B = gt_alpha * gt_foreground
 	GT_C_W = (1-gt_alpha) + gt_alpha * gt_foreground 
 
-	a_in = batch['A'].to(device)
 
 	pd_foreground = []
 	pd_alpha = []

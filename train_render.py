@@ -16,9 +16,9 @@ parser.add_argument('--render_ckpt', type=str, default=r'./checkpoints_RD/50_epo
                     help='dir to save checkpoints (default: ...)')
 parser.add_argument('--vis_dir', type=str, default=r'./val_out_R', metavar='str',
                     help='dir to save results during training (default: ./val_out_R)')
-parser.add_argument('--lr', type=float, default=2e-4,
+parser.add_argument('--lr', type=float, default=3e-4,
                     help='learning rate (default: 0.0002)')
-parser.add_argument('--lr_gan', type=float, default=2e-4,
+parser.add_argument('--lr_gan', type=float, default=3e-4,
                     help='learning rate (default: 0.0002)')
 parser.add_argument('--max_num_epochs', type=int, default=500, metavar='N',
                     help='max number of training epochs (default 400)')
@@ -34,6 +34,8 @@ parser.add_argument('--only_white', type=bool, default=False, metavar='N',
                     help='only backward white canvas')
 parser.add_argument('--rand_c', type=bool, default=False, metavar='N',
                     help='noise canvas')
+parser.add_argument('--patch_gan_loss', type=bool, default=False, metavar='N',
+                    help='noise canvas')
 args = parser.parse_args()
 
 if __name__ == '__main__':
@@ -42,7 +44,7 @@ if __name__ == '__main__':
 	else:
 		if args.net_R == 'Style-render':
 			T = renderTrain.StyTrain(args)
-		if args.net_R == 'MB-render':
+		elif args.net_R == 'MB-render':
 			T = renderTrain.IRTrain(args)
 		else:
 			T = renderTrain.Train(args)
