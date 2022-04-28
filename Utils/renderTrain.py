@@ -1,5 +1,6 @@
 import os
 import resource
+import datetime
 from turtle import backward, forward, pd
 
 import torch
@@ -103,10 +104,13 @@ class Train(object):
     def _clear_cache(self):
         self.running_acc = []
 
+    def _render_forward(self, actions):
+        return self.render(actions)
+
     def _forward_pass(self, batch):
         self.batch = batch
         self.z_in = batch['A'].to(device)
-        pred_foreground, pred_alpha = self.render(self.z_in)
+        pred_foreground, pred_alpha = self._render_forward(self.z_in)
         gt_foreground, gt_alpha = self.batch['B'].to(device),self.batch['ALPHA'].to(device)
         if self.rand_c:
             C_R = torch.rand(pred_foreground.shape).to(device)
@@ -231,10 +235,12 @@ class Train(object):
 
     def train(self):
         print("Traning Render. Device:", device)
+        self.start_time = datetime.datetime.now()
         self.LoadCheckPoint()
         if self.is_VIS:
             self.vis = visdom.Visdom(port=self.vis_port)
         for self.epoch_id in range(self.epoch_to_start, self.max_num_epochs):
+            self.epoch_start_time = datetime.datetime.now()
             self._clear_cache()
             self.is_training = True
             self.render.train()
@@ -247,44 +253,18 @@ class Train(object):
             self._collect_epoch_states()
             self._update_lr_sechedulers()
             self._update_checkpoints()
+            t2 = datetime.datetime.now()
+            print("Start:", self.start_time, "Cost:", t2-self.start_time, t2-self.epoch_start_time, "Per Epoch")
 
 
-class IRTrain(Train):
-    def _forward_pass(self, batch):
-        self.batch = batch
-        self.z_in = batch['A'].to(device)
-        pred_foreground, pred_alpha, reg = self.render(self.z_in)
-        gt_foreground, gt_alpha = self.batch['B'].to(device),self.batch['ALPHA'].to(device)
-        if self.rand_c:
-            C_R = torch.rand(pred_foreground.shape).to(device)
-            self.PD_C_R = (1-pred_alpha) * C_R + pred_alpha * pred_foreground
-            self.GT_C_R = (1-gt_alpha) * C_R + gt_alpha * gt_foreground
-        self.REG = reg
-        self.PD_C_B = pred_alpha * pred_foreground
-        self.PD_C_W = (1-pred_alpha) + pred_alpha * pred_foreground
-        self.old_GT_C_B = self.GT_C_B
-        self.old_GT_C_W = self.GT_C_W
-        self.GT_C_B = gt_alpha * gt_foreground
-        self.GT_C_W = (1-gt_alpha) + gt_alpha * gt_foreground 
-    def _backward_R(self):
-        pixel_loss1 = self._pxl_loss(self.PD_C_B, self.GT_C_B)
-        pixel_loss2 = self._pxl_loss(self.PD_C_W, self.GT_C_W)
-        if self.only_black and not self.only_white:
-            self.LOSS['R_loss'] = pixel_loss1
-        elif self.only_white and not self.only_black:
-            self.LOSS['R_loss'] = pixel_loss2
-        elif self.rand_c:
-            pixel_loss3 = self._pxl_loss(self.PD_C_R, self.GT_C_R)
-            self.LOSS['R_loss'] = pixel_loss3
-            self.LOSS['RCR_loss'] = pixel_loss3
+class SLNTrain(Train):
+    def _render_forward(self, actions):
+        if self.epoch_id < 150:
+            return self.render(actions, 0)
+        elif self.epoch_id < 175 and self.epoch_id > 150:
+            return self.render(actions, float(self.epoch_id - 150)/25)
         else:
-            self.LOSS['R_loss'] = pixel_loss1 + pixel_loss2
-        self.LOSS['RCW_loss'] = pixel_loss2
-        self.LOSS['RCB_loss'] = pixel_loss1
-        self.LOSS['REG_term'] = self.REG
-        (self.LOSS['R_loss'] + 0.3 * self.REG).backward()
-        
-
+            return self.render(actions, 1)
         
 
 

@@ -76,7 +76,7 @@ class StyleRenderLight(nn.Module):
         self.to_RGB = nn.Conv2d(dim, 3, 1, 1, 0)
         self.to_ALPHA = nn.Conv2d(dim, 1, 1, 1, 0)
 
-    def forward(self, actions):
+    def forward(self, actions, alpha=1.0):
         w = self.MapNet(actions)
         x = self.const
         x = self.L1(x, w)
@@ -84,5 +84,10 @@ class StyleRenderLight(nn.Module):
         x = self.L3(x, w)
         x = self.L4(x, w)
         x = self.L5(x, w)
-        x = self.Restoration(x)
+        if alpha < 1 and alpha > 0:
+            x_hat = self.Restoration(x)
+            return self.to_RGB(x)*(1-alpha) + self.to_RGB(x_hat)*alpha,\
+                self.to_ALPHA(x)*(1-alpha) + self.to_ALPHA(x_hat)*alpha
+        if alpha == 1.0:
+            x = self.Restoration(x)
         return self.to_RGB(x), self.to_ALPHA(x)

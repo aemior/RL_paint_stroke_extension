@@ -44,8 +44,8 @@ if __name__ == '__main__':
 	else:
 		if args.net_R == 'Style-render':
 			T = renderTrain.StyTrain(args)
-		elif args.net_R == 'MB-render':
-			T = renderTrain.IRTrain(args)
+		elif args.net_R == 'Style-Light':
+			T = renderTrain.SLNTrain(args)
 		else:
 			T = renderTrain.Train(args)
 	T.train()
