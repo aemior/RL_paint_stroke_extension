@@ -1,8 +1,6 @@
 
 import torch
 import torch.nn as nn
-from Networks.NAFnet import NAFNet,SimpleGate
-from Networks.stylegan_v2 import ins_nor
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -72,11 +70,10 @@ class StyleRenderLight(nn.Module):
         self.L3 = StyleBlock(dim*8, dim*4, w_dim=w_dim) #32*32
         self.L4 = StyleBlock(dim*4, dim*2, w_dim=w_dim) #64*64
         self.L5 = StyleBlock(dim*2, dim, w_dim=w_dim) #128*128
-        self.Restoration = NAFNet(img_channel=dim, width=dim)
         self.to_RGB = nn.Conv2d(dim, 3, 1, 1, 0)
         self.to_ALPHA = nn.Conv2d(dim, 1, 1, 1, 0)
 
-    def forward(self, actions, alpha=1.0):
+    def main_forward(self, actions):
         w = self.MapNet(actions)
         x = self.const
         x = self.L1(x, w)
@@ -84,10 +81,36 @@ class StyleRenderLight(nn.Module):
         x = self.L3(x, w)
         x = self.L4(x, w)
         x = self.L5(x, w)
-        if alpha < 1 and alpha > 0:
-            x_hat = self.Restoration(x)
-            return self.to_RGB(x)*(1-alpha) + self.to_RGB(x_hat)*alpha,\
-                self.to_ALPHA(x)*(1-alpha) + self.to_ALPHA(x_hat)*alpha
-        if alpha == 1.0:
-            x = self.Restoration(x)
+        return x, w
+
+    def forward(self, actions):
+        x, w = self.main_forward(actions)
         return self.to_RGB(x), self.to_ALPHA(x)
+
+class StyleRenderLight_256(StyleRenderLight):
+    def __init__(self, action_size, noise_dim=4, dim=32, w_dim=512):
+        super().__init__(action_size, noise_dim, dim, w_dim)
+        self.L6 = StyleBlock(dim, dim, w_dim=w_dim) #256*256
+
+    def main_forward(self, actions):
+        x, w = super().main_forward(actions)
+        x = self.L6(x, w)
+        return x, w
+
+
+def ins_nor(feat):
+    size = feat.size()
+    content_mean, content_std = calc_mean_std(feat)
+    normalized_feat = (feat - content_mean.expand(
+        size)) / content_std.expand(size)
+    return normalized_feat
+
+def calc_mean_std(feat, eps=1e-5):
+    # eps is a small value added to the variance to avoid divide-by-zero.
+    size = feat.size()
+    assert (len(size) == 4)
+    N, C = size[:2]
+    feat_var = feat.view(N, C, -1).var(dim=2) + eps
+    feat_std = feat_var.sqrt().view(N, C, 1, 1)
+    feat_mean = feat.view(N, C, -1).mean(dim=2).view(N, C, 1, 1)
+    return feat_mean, feat_std

@@ -14,7 +14,6 @@ from zmq import device
 
 from Renders import RealRenders
 from Networks.render import define_R
-from Networks.Discriminator import define_D
 from Networks.translator import define_T
 
 M_RENDERING_SAMPLES_PER_EPOCH = 50000
@@ -26,19 +25,19 @@ ACTION_SHAPESIZE = {'MyPaintWaterInk':9, 'MyPaintPencil':9, 'MyPaintCharcoal':9,
 class StrokeDataset(Dataset):
 	def __init__(self, args, is_train=True, batch_size=16):
 		if args.StrokeType == 'MyPaintWaterInk':
-			self.RENDER = RealRenders.MyPaintStroke(128, 'WaterInk')
+			self.RENDER = RealRenders.MyPaintStroke(args.canvas_width, 'WaterInk')
 		elif args.StrokeType == 'MyPaintPencil':
-			self.RENDER = RealRenders.MyPaintStroke(128, 'Pencil')
+			self.RENDER = RealRenders.MyPaintStroke(args.canvas_width, 'Pencil')
 		elif args.StrokeType == 'MyPaintCharcoal':
-			self.RENDER = RealRenders.MyPaintStroke(128, 'Charcoal')
+			self.RENDER = RealRenders.MyPaintStroke(args.canvas_width, 'Charcoal')
 		elif args.StrokeType == 'WaterColor':
 			self.RENDER = RealRenders.WaterColorStroke()
 		elif args.StrokeType == 'OilPaint':
-			self.RENDER = RealRenders.SNPStroke(cw=128, BrushType='oilpaintbrush')
+			self.RENDER = RealRenders.SNPStroke(cw=args.canvas_width, BrushType='oilpaintbrush')
 		elif args.StrokeType == 'MarkPen':
-			self.RENDER = RealRenders.SNPStroke(cw=128, BrushType='markerpen')
+			self.RENDER = RealRenders.SNPStroke(cw=args.canvas_width, BrushType='markerpen')
 		elif args.StrokeType == 'Rectangle':
-			self.RENDER = RealRenders.SNPStroke(cw=128, BrushType='rectangle')
+			self.RENDER = RealRenders.SNPStroke(cw=args.canvas_width, BrushType='rectangle')
 		self.is_train = is_train
 
 	def __len__(self):
@@ -69,13 +68,6 @@ def get_stroke_dataset(args):
 def get_neural_render(stroke_type, net_R):
 	return define_R(rddim=ACTION_SIZE[stroke_type],\
 		 shape_dim=ACTION_SHAPESIZE[stroke_type], netR=net_R)
-
-def get_discriminator(args):
-	from Networks.Discriminator import PatchDiscriminator
-	netD = PatchDiscriminator()
-	netD.load_state_dict(torch.load(os.path.join(args.checkpoint_dir, 'wgan.pkl')))
-	return netD
-	#return define_D(ACTION_SIZE[stroke_type])
 
 def get_translator(args):
 	return define_T(ACTION_SIZE[args.StrokeType], ACTION_SIZE[args.TargetStroke], "FCN4L")

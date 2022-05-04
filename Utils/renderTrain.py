@@ -11,7 +11,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import visdom
 
-from Utils.utils import get_neural_render,get_stroke_dataset,get_discriminator,calc_gradient_penalty,cal_gradient_penalty
+from Utils.utils import get_neural_render,get_stroke_dataset,calc_gradient_penalty,cal_gradient_penalty
 import Utils.utils as utils
 
 # Decide which device we want to run on
@@ -176,15 +176,18 @@ class Train(object):
                     self.vis.images(self.PD_C_W, win='PD_C_W')
 
         if np.mod(self.batch_id, 1000) == 1:
+            n = self.batch['A'].shape[0]
+            if n > 64:
+                n = 64
             if self.rand_c:
-                vis_pred = utils.make_numpy_grid(self.PD_C_R)
-                vis_gt = utils.make_numpy_grid(self.GT_C_R)
+                vis_pred = utils.make_numpy_grid(self.PD_C_R[:n])
+                vis_gt = utils.make_numpy_grid(self.GT_C_R[:n])
                 vis = np.concatenate([vis_gt, vis_pred], axis=0)
             else:
-                vis_pred_foreground = utils.make_numpy_grid(self.GT_C_B)
-                vis_gt_foreground = utils.make_numpy_grid(self.PD_C_B)
-                vis_pred_alpha = utils.make_numpy_grid(self.GT_C_W)
-                vis_gt_alpha = utils.make_numpy_grid(self.PD_C_W)
+                vis_pred_foreground = utils.make_numpy_grid(self.GT_C_B[:n])
+                vis_gt_foreground = utils.make_numpy_grid(self.PD_C_B[:n])
+                vis_pred_alpha = utils.make_numpy_grid(self.GT_C_W[:n])
+                vis_gt_alpha = utils.make_numpy_grid(self.PD_C_W[:n])
 
                 vis = np.concatenate([vis_pred_foreground, vis_gt_foreground,
                                         vis_pred_alpha, vis_gt_alpha], axis=0)

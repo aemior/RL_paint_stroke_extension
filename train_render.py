@@ -5,6 +5,8 @@ parser = argparse.ArgumentParser(description='Render Training Program')
 parser.add_argument('--StrokeType', type=str, default=r'MyPaintWaterInk', metavar='str',
                     help='set stroke type:MyPaintWaterInk, MyPaintPencil, MyPaintCharcoal\
 						WaterColor, SimOilPaint, MarkPen, Rectangle')
+parser.add_argument('--canvas_width', type=int, default=128, metavar='N',
+                    help='canvas_width')
 parser.add_argument('--batch_size', type=int, default=64, metavar='N',
                     help='input batch size for training (default: 4)')
 parser.add_argument('--net_R', type=str, default='dual-render', metavar='str',
